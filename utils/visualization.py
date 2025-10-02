@@ -134,6 +134,7 @@ class Visualizer:
         latency: float = 0.0,
         num_objects: int = 0,
         num_faces: int = 0,
+        stage_timings: Dict[str, float] = None,
     ) -> np.ndarray:
         """
         Draw information overlay on frame.
@@ -144,12 +145,18 @@ class Visualizer:
             latency: Processing latency in milliseconds
             num_objects: Number of detected objects
             num_faces: Number of tracked faces
+            stage_timings: Optional dict of stage timing breakdowns in ms
 
         Returns:
             Frame with info overlay
         """
         h, w = frame.shape[:2]
+
+        # Calculate overlay height based on content
         overlay_height = 100
+        if stage_timings:
+            overlay_height += 25 * len(stage_timings)
+
         overlay = frame.copy()
 
         # Semi-transparent background
@@ -202,6 +209,21 @@ class Visualizer:
             text_color,
             2
         )
+        y_offset += 25
+
+        # Stage timings breakdown (if enabled)
+        if stage_timings:
+            for stage, time_ms in stage_timings.items():
+                cv2.putText(
+                    frame,
+                    f"  {stage}: {time_ms:.1f}ms",
+                    (10, y_offset),
+                    font,
+                    self.font_scale * 0.8,
+                    (100, 200, 255),  # Light orange for timing details
+                    1
+                )
+                y_offset += 25
 
         return frame
 
@@ -224,6 +246,7 @@ class Visualizer:
             "S: Save frame",
             "R: Record",
             "I: Toggle info",
+            "P: Toggle profiling",
             "F: Toggle faces",
             "O: Toggle objects",
         ]

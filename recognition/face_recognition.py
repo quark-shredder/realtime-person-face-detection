@@ -18,6 +18,8 @@ class FaceRecognitionSystem:
         model_pack: str = "buffalo_l",
         enrolled_faces_path: str = "data/enrolled",
         similarity_threshold: float = 0.50,
+        ctx_id: int = -1,
+        det_size: int = 128,
     ):
         """
         Initialize face recognition system.
@@ -26,6 +28,8 @@ class FaceRecognitionSystem:
             model_pack: InsightFace model pack (buffalo_l, buffalo_s)
             enrolled_faces_path: Path to enrolled face embeddings
             similarity_threshold: Cosine similarity threshold for matching
+            ctx_id: -1 for CPU, 0 for GPU
+            det_size: Detection size (128 for speed, 256 for accuracy)
         """
         self.model_pack = model_pack
         self.enrolled_path = Path(enrolled_faces_path)
@@ -35,9 +39,9 @@ class FaceRecognitionSystem:
         self.enrolled_path.mkdir(parents=True, exist_ok=True)
 
         # Initialize InsightFace
-        print(f"Loading InsightFace model pack: {model_pack}")
+        print(f"Loading InsightFace model pack: {model_pack} (ctx_id={ctx_id}, det_size={det_size})")
         self.app = FaceAnalysis(name=model_pack)
-        self.app.prepare(ctx_id=0, det_size=(256, 256))
+        self.app.prepare(ctx_id=ctx_id, det_size=(det_size, det_size))
 
         # Load enrolled faces
         self.enrolled_faces: Dict[str, np.ndarray] = {}
@@ -188,7 +192,7 @@ class RecognitionWorker:
         """
         self.system = recognition_system
         self.task_queue: queue.Queue = queue.Queue(maxsize=10)
-        self.result_queue: queue.Queue = queue.Queue()
+        self.result_queue: queue.Queue = queue.Queue(maxsize=10)  # Bound to prevent memory buildup
         self.running = False
         self.worker_thread: Optional[threading.Thread] = None
 
@@ -214,11 +218,16 @@ class RecognitionWorker:
             # Perform recognition
             name, confidence = self.system.recognize_face(image, bbox)
 
-            # Put result
+            # Put result, clearing oldest if queue is full
             try:
                 self.result_queue.put_nowait((track_id, name, confidence))
             except queue.Full:
-                pass
+                # Clear oldest result to make room
+                try:
+                    self.result_queue.get_nowait()
+                    self.result_queue.put_nowait((track_id, name, confidence))
+                except:
+                    pass
 
             self.task_queue.task_done()
 

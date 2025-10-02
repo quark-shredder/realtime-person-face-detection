@@ -37,6 +37,8 @@ def main():
         model_pack=config.face_recognition.model_pack,
         enrolled_faces_path=config.face_recognition.enrolled_faces_path,
         similarity_threshold=config.face_recognition.similarity_threshold,
+        ctx_id=config.face_recognition.ctx_id,
+        det_size=config.face_recognition.det_size,
     )
 
     # Initialize camera

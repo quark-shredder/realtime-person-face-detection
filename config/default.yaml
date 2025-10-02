@@ -5,14 +5,17 @@ camera:
   width: 640
   height: 480
   fps: 30
-  buffer_size: 2
+  buffer_size: 4  # Increased for better frame management
 
 object_detector:
   enabled: true
-  model: "fasterrcnn_mobilenet"  # torchvision Faster R-CNN MobileNetV3
+  model: "yolox_nano"
+  input_size: 416
   confidence_threshold: 0.30
+  nms_threshold: 0.45
   max_detections: 50
   device: "mps"  # mps, cuda, or cpu
+  model_path: "data/models/yolox_nano.pth"
 
 face_detector:
   enabled: true
@@ -22,12 +25,14 @@ face_detector:
 
 face_recognition:
   enabled: true
-  model_pack: "buffalo_l"  # buffalo_l, buffalo_s
+  model_pack: "buffalo_s"  # buffalo_l, buffalo_s (using smaller for speed)
   embedding_model: "mobilefacenet"  # mobilefacenet, arcface_r50
   similarity_threshold: 0.50
   enrollment_samples: 15
   recognition_interval: 30  # frames between re-recognition per track
   enrolled_faces_path: "data/enrolled"
+  ctx_id: -1  # -1 for CPU, 0 for GPU (CPU faster on MPS for InsightFace)
+  det_size: 128  # Detection size (128 for speed, 256 for accuracy)
 
 tracking:
   enabled: true

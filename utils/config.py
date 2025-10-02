@@ -44,6 +44,8 @@ class FaceRecognitionConfig:
     enrollment_samples: int = 15
     recognition_interval: int = 30
     enrolled_faces_path: str = "data/enrolled"
+    ctx_id: int = -1  # -1 for CPU, 0 for GPU
+    det_size: int = 128  # Detection size for InsightFace
 
 
 @dataclass

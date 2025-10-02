@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore', category=FutureWarning, module='insightface')
 from utils.config import Config
 from utils.camera import CameraManager, CameraPermissionError, CameraNotFoundError
 from utils.visualization import Visualizer
-from detectors.object_detector import ObjectDetector
+from detectors.yolox_detector import YOLOXDetector
 from detectors.face_detector import MediaPipeFaceDetector
 from tracking.bytetrack import ByteTracker
 from recognition.face_recognition import FaceRecognitionSystem, RecognitionWorker
@@ -41,8 +41,11 @@ class RealtimeDetectionApp:
         if config.object_detector.enabled:
             print("Initializing object detector...")
             try:
-                self.object_detector = ObjectDetector(
+                self.object_detector = YOLOXDetector(
+                    model_path=config.object_detector.model_path,
+                    input_size=config.object_detector.input_size,
                     confidence_threshold=config.object_detector.confidence_threshold,
+                    nms_threshold=config.object_detector.nms_threshold,
                     max_detections=config.object_detector.max_detections,
                     device=config.object_detector.device,
                 )
@@ -81,6 +84,8 @@ class RealtimeDetectionApp:
                     model_pack=config.face_recognition.model_pack,
                     enrolled_faces_path=config.face_recognition.enrolled_faces_path,
                     similarity_threshold=config.face_recognition.similarity_threshold,
+                    ctx_id=config.face_recognition.ctx_id,
+                    det_size=config.face_recognition.det_size,
                 )
                 self.recognition_worker = RecognitionWorker(self.face_recognition)
                 self.recognition_worker.start()
@@ -104,8 +109,14 @@ class RealtimeDetectionApp:
         self.running = False
         self.show_info = True
         self.show_controls = True
+        self.show_profiling = False  # Toggle for detailed timing breakdown
         self.recording = False
         self.video_writer = None
+
+        # Frame skipping for performance
+        self.frame_count = 0
+        self.last_object_detections = []
+        self.last_face_detections = []
 
         print("\nInitialization complete!")
         print("=" * 60)
@@ -149,7 +160,9 @@ class RealtimeDetectionApp:
 
         try:
             while self.running:
-                loop_start = time.time()
+                loop_start = time.perf_counter()
+                stage_timings = {}
+                self.frame_count += 1
 
                 # Get frame
                 result = self.camera.read(timeout=1.0)
@@ -158,25 +171,43 @@ class RealtimeDetectionApp:
                     continue
 
                 timestamp, frame = result
-                display_frame = frame.copy()
 
-                # Object detection
+                # Object detection (skip every 3rd frame)
                 object_detections = []
                 if self.object_detector and self.config.object_detector.enabled:
-                    object_detections = self.object_detector(frame)
+                    if self.frame_count % 3 == 0:
+                        t0 = time.perf_counter()
+                        object_detections = self.object_detector(frame)
+                        self.last_object_detections = object_detections
+                        stage_timings['object_det'] = (time.perf_counter() - t0) * 1000
+                    else:
+                        # Reuse last detections
+                        object_detections = self.last_object_detections
+                        stage_timings['object_det'] = 0.0  # Skipped
 
-                # Face detection
+                # Face detection (skip every 2nd frame)
                 face_detections = []
                 tracks = []
                 if self.face_detector and self.config.face_detector.enabled:
-                    face_detections = self.face_detector(frame)
+                    if self.frame_count % 2 == 0:
+                        t0 = time.perf_counter()
+                        face_detections = self.face_detector(frame)
+                        self.last_face_detections = face_detections
+                        stage_timings['face_det'] = (time.perf_counter() - t0) * 1000
+                    else:
+                        # Reuse last detections
+                        face_detections = self.last_face_detections
+                        stage_timings['face_det'] = 0.0  # Skipped
 
-                    # Track faces
-                    if self.tracker:
+                    # Track faces (only if faces detected)
+                    if self.tracker and face_detections:
+                        t0 = time.perf_counter()
                         tracks = self.tracker.update(face_detections)
+                        stage_timings['tracking'] = (time.perf_counter() - t0) * 1000
 
                         # Face recognition
                         if self.recognition_worker and self.config.face_recognition.enabled:
+                            t0 = time.perf_counter()
                             # Get tracks that need recognition
                             tracks_to_recognize = self.tracker.get_tracks_for_recognition(
                                 self.config.face_recognition.recognition_interval
@@ -198,6 +229,13 @@ class RealtimeDetectionApp:
                                     if track.track_id == track_id:
                                         track.label = name
                                         break
+                            stage_timings['recognition'] = (time.perf_counter() - t0) * 1000
+                    elif self.tracker and not face_detections:
+                        # No faces - skip tracking
+                        stage_timings['tracking'] = 0.0
+
+                # Copy frame only before drawing (saves ~5-10ms per frame)
+                display_frame = frame.copy()
 
                 # Visualization
                 if object_detections:
@@ -212,7 +250,7 @@ class RealtimeDetectionApp:
 
                 # Info overlay
                 if self.show_info:
-                    loop_time = time.time() - loop_start
+                    loop_time = time.perf_counter() - loop_start
                     fps = self.visualizer.calculate_fps(loop_time)
                     latency = loop_time * 1000  # Convert to ms
 
@@ -222,6 +260,7 @@ class RealtimeDetectionApp:
                         latency=latency,
                         num_objects=len(object_detections),
                         num_faces=len(tracks),
+                        stage_timings=stage_timings if self.show_profiling else None,
                     )
 
                 # Controls overlay
@@ -298,6 +337,11 @@ class RealtimeDetectionApp:
             if self.object_detector:
                 self.config.object_detector.enabled = not self.config.object_detector.enabled
                 print(f"Object detection: {'ON' if self.config.object_detector.enabled else 'OFF'}")
+
+        elif key == ord('p') or key == ord('P'):
+            # Toggle profiling overlay
+            self.show_profiling = not self.show_profiling
+            print(f"Profiling overlay: {'ON' if self.show_profiling else 'OFF'}")
 
         return True
 

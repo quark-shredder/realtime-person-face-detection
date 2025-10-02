@@ -115,7 +115,7 @@ class CameraManager:
                 # Set camera properties
                 self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
                 self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-                self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+                # Don't force FPS - let camera use native rate to avoid driver issues
 
                 # Disable auto-focus for stability (if supported)
                 self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
