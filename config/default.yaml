@@ -9,13 +9,10 @@ camera:
 
 object_detector:
   enabled: true
-  model: "yolox_nano"
-  input_size: 416
+  model: "fasterrcnn_mobilenet"  # torchvision Faster R-CNN MobileNetV3
   confidence_threshold: 0.30
-  nms_threshold: 0.45
   max_detections: 50
   device: "mps"  # mps, cuda, or cpu
-  model_path: "data/models/yolox_nano.pth"
 
 face_detector:
   enabled: true

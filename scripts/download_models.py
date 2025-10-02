@@ -33,30 +33,14 @@ def verify_checksum(filepath: Path, expected_md5: str) -> bool:
     return md5.hexdigest() == expected_md5
 
 
-def download_yolox_nano():
-    """Download YOLOX-Nano pretrained weights."""
-    print("\n[1/2] Downloading YOLOX-Nano model...")
+def setup_torchvision():
+    """Setup torchvision object detection model."""
+    print("\n[1/2] Setting up object detection model...")
 
-    model_dir = Path("data/models")
-    model_dir.mkdir(parents=True, exist_ok=True)
-
-    model_path = model_dir / "yolox_nano.pth"
-
-    if model_path.exists():
-        print(f"✓ Model already exists: {model_path}")
-        return True
-
-    # Official YOLOX-Nano weights from Megvii GitHub releases
-    url = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.pth"
-
-    try:
-        print(f"  Downloading from: {url}")
-        urlretrieve(url, model_path, DownloadProgress())
-        print(f"✓ Downloaded: {model_path}")
-        return True
-    except Exception as e:
-        print(f"✗ Failed to download YOLOX-Nano: {e}")
-        return False
+    print("  Using torchvision Faster R-CNN MobileNetV3")
+    print("  Model will auto-download on first use (~20MB)")
+    print("✓ Object detection model ready")
+    return True
 
 
 def setup_insightface():
@@ -83,8 +67,8 @@ def download_all():
 
     success = True
 
-    # YOLOX
-    if not download_yolox_nano():
+    # Object detection
+    if not setup_torchvision():
         success = False
 
     # InsightFace

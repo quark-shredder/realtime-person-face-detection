@@ -9,7 +9,7 @@ from datetime import datetime
 from utils.config import Config
 from utils.camera import CameraManager, CameraPermissionError, CameraNotFoundError
 from utils.visualization import Visualizer
-from detectors.yolox_detector import YOLOXDetector
+from detectors.object_detector import ObjectDetector
 from detectors.face_detector import MediaPipeFaceDetector
 from tracking.bytetrack import ByteTracker
 from recognition.face_recognition import FaceRecognitionSystem, RecognitionWorker
@@ -37,11 +37,8 @@ class RealtimeDetectionApp:
         if config.object_detector.enabled:
             print("Initializing object detector...")
             try:
-                self.object_detector = YOLOXDetector(
-                    model_path=config.object_detector.model_path,
-                    input_size=config.object_detector.input_size,
+                self.object_detector = ObjectDetector(
                     confidence_threshold=config.object_detector.confidence_threshold,
-                    nms_threshold=config.object_detector.nms_threshold,
                     max_detections=config.object_detector.max_detections,
                     device=config.object_detector.device,
                 )
