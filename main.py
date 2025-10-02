@@ -17,6 +17,8 @@ from detectors.yolox_detector import YOLOXDetector
 from detectors.face_detector import MediaPipeFaceDetector
 from tracking.bytetrack import ByteTracker
 from recognition.face_recognition import FaceRecognitionSystem, RecognitionWorker
+from captioning.caption_worker import CaptionWorker
+from web import server, launcher
 
 
 class RealtimeDetectionApp:
@@ -48,6 +50,7 @@ class RealtimeDetectionApp:
                     nms_threshold=config.object_detector.nms_threshold,
                     max_detections=config.object_detector.max_detections,
                     device=config.object_detector.device,
+                    model_name=config.object_detector.model,
                 )
             except Exception as e:
                 print(f"Warning: Failed to load object detector: {e}")
@@ -93,6 +96,32 @@ class RealtimeDetectionApp:
                 print(f"Warning: Failed to initialize face recognition: {e}")
                 print("Continuing without face recognition...")
                 self.face_recognition = None
+
+        # Initialize caption worker
+        self.caption_worker = None
+        if config.captioning.enabled:
+            print("Initializing caption worker...")
+            try:
+                self.caption_worker = CaptionWorker(config.captioning)
+            except Exception as e:
+                print(f"Warning: Failed to initialize caption worker: {e}")
+                print("Continuing without captioning...")
+                self.caption_worker = None
+
+        # Initialize web server
+        self.web_server = None
+        if config.web_ui.enabled:
+            print("Initializing web server...")
+            try:
+                self.web_server = launcher.start_web_server(
+                    config.web_ui.host,
+                    config.web_ui.port,
+                    config.web_ui.stream_fps
+                )
+            except Exception as e:
+                print(f"Warning: Failed to start web server: {e}")
+                print("Continuing in OpenCV mode...")
+                self.web_server = None
 
         # Initialize visualizer
         self.visualizer = Visualizer(
@@ -154,6 +183,11 @@ class RealtimeDetectionApp:
 
         # Wait for camera to warm up
         time.sleep(0.5)
+
+        # Start caption worker if initialized
+        if self.caption_worker:
+            self.caption_worker.start()
+            print("✓ Caption worker started")
 
         print("\nStarting detection...")
         print("Press 'Q' to quit\n")
@@ -234,6 +268,36 @@ class RealtimeDetectionApp:
                         # No faces - skip tracking
                         stage_timings['tracking'] = 0.0
 
+                # Caption worker update (only when enabled)
+                caption = {"text": "", "error": None, "latency_ms": 0, "age_ms": 0}
+                if self.caption_worker and self.config.captioning.enabled:
+                    self.caption_worker.update_frame(frame)
+                    caption = self.caption_worker.get_latest_caption()
+
+                # Handle browser config updates (if web UI enabled)
+                if self.web_server:
+                    config_update = server.pop_config_update()
+                    if config_update:
+                        if "prompt" in config_update:
+                            self.config.captioning.prompt = config_update["prompt"]
+                            if self.caption_worker:
+                                self.caption_worker.set_prompt(config_update["prompt"])
+                        if "interval" in config_update:
+                            self.config.captioning.interval_seconds = config_update["interval"]
+                            if self.caption_worker:
+                                self.caption_worker.set_interval(config_update["interval"])
+
+                    toggle = server.pop_toggle()
+                    if toggle:
+                        feature = toggle.get("feature")
+                        enabled = toggle.get("enabled", False)
+                        if feature == "caption":
+                            self.config.captioning.enabled = enabled
+                        elif feature == "objects":
+                            self.config.object_detector.enabled = enabled
+                        elif feature == "faces":
+                            self.config.face_detector.enabled = enabled
+
                 # Copy frame only before drawing (saves ~5-10ms per frame)
                 display_frame = frame.copy()
 
@@ -246,6 +310,12 @@ class RealtimeDetectionApp:
                 if tracks:
                     display_frame = self.visualizer.draw_face_tracks(
                         display_frame, tracks
+                    )
+
+                # Caption overlay (OpenCV mode only)
+                if (caption.get("text") or caption.get("error")) and not self.web_server:
+                    display_frame = self.visualizer.draw_caption(
+                        display_frame, caption
                     )
 
                 # Info overlay
@@ -271,13 +341,32 @@ class RealtimeDetectionApp:
                 if self.recording and self.video_writer:
                     self.video_writer.write(display_frame)
 
-                # Display
-                cv2.imshow("Real-time Detection", display_frame)
+                # Update web UI state
+                if self.web_server:
+                    # Choose frame based on config (with or without overlays)
+                    web_frame = display_frame if self.config.web_ui.send_overlays else frame
+                    fps = self.visualizer.calculate_fps(time.perf_counter() - loop_start)
+                    server.update_state(
+                        frame=web_frame,
+                        objects=object_detections,
+                        faces=tracks,
+                        caption=caption,
+                        fps=fps,
+                        stats=stage_timings,
+                        frame_quality=self.config.web_ui.frame_quality
+                    )
 
-                # Handle keyboard input
-                key = cv2.waitKey(1) & 0xFF
-                if not self.handle_key(key, display_frame):
-                    break
+                # Display (OpenCV mode)
+                if not self.web_server:
+                    cv2.imshow("Real-time Detection", display_frame)
+
+                    # Handle keyboard input (OpenCV mode only)
+                    key = cv2.waitKey(1) & 0xFF
+                    if not self.handle_key(key, display_frame):
+                        break
+                else:
+                    # Web mode: small sleep to allow interrupts (Ctrl+C)
+                    time.sleep(0.001)
 
                 # FPS limiting (avoid excessive CPU usage)
                 target_frame_time = 1.0 / self.config.performance.target_fps
@@ -343,6 +432,12 @@ class RealtimeDetectionApp:
             self.show_profiling = not self.show_profiling
             print(f"Profiling overlay: {'ON' if self.show_profiling else 'OFF'}")
 
+        elif key == ord('c') or key == ord('C'):
+            # Toggle captioning (OpenCV mode only)
+            if self.caption_worker and not self.web_server:
+                self.config.captioning.enabled = not self.config.captioning.enabled
+                print(f"Captioning: {'ON' if self.config.captioning.enabled else 'OFF'}")
+
         return True
 
     def save_frame(self, frame):
@@ -404,6 +499,10 @@ class RealtimeDetectionApp:
         # Stop recognition worker
         if self.recognition_worker:
             self.recognition_worker.stop()
+
+        # Stop caption worker
+        if self.caption_worker:
+            self.caption_worker.stop()
 
         # Close face detector
         if self.face_detector:

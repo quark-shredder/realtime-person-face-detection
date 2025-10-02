@@ -127,6 +127,117 @@ class Visualizer:
 
         return frame
 
+    def draw_caption(
+        self,
+        frame: np.ndarray,
+        caption: Dict[str, any]
+    ) -> np.ndarray:
+        """
+        Draw caption overlay at bottom of frame.
+
+        Args:
+            frame: Image to draw on
+            caption: Dict with text, error, latency_ms, age_ms
+
+        Returns:
+            Frame with caption overlay
+        """
+        h, w = frame.shape[:2]
+        text = caption.get("text", "")
+        error = caption.get("error")
+        age_ms = caption.get("age_ms", 0)
+        latency_ms = caption.get("latency_ms", 0)
+
+        # Skip if no text and no error
+        if not text and not error:
+            return frame
+
+        # Font settings
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.6
+        thickness = 2
+        line_height = 30
+        padding = 15
+        max_width = w - 2 * padding
+
+        # Wrap text to fit width
+        words = text.split()
+        lines = []
+        current_line = []
+
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            (text_w, _), _ = cv2.getTextSize(test_line, font, font_scale, thickness)
+
+            if text_w <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        # Calculate overlay dimensions
+        num_lines = len(lines) + 1  # +1 for metadata line
+        if error:
+            num_lines += 1
+        overlay_height = num_lines * line_height + 2 * padding
+
+        # Draw semi-transparent background
+        overlay = frame.copy()
+        y_start = h - overlay_height
+        cv2.rectangle(
+            overlay,
+            (0, y_start),
+            (w, h),
+            (40, 40, 40),
+            -1
+        )
+        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+
+        # Draw caption text
+        y_offset = y_start + padding + line_height
+        for line in lines:
+            cv2.putText(
+                frame,
+                line,
+                (padding, y_offset),
+                font,
+                font_scale,
+                (255, 255, 0),  # Yellow for caption text
+                thickness
+            )
+            y_offset += line_height
+
+        # Draw metadata (age and latency)
+        metadata = f"Age: {age_ms:.0f}ms | Latency: {latency_ms:.0f}ms"
+        cv2.putText(
+            frame,
+            metadata,
+            (padding, y_offset),
+            font,
+            0.5,
+            (200, 200, 200),  # Light gray
+            1
+        )
+        y_offset += line_height
+
+        # Draw error if present
+        if error:
+            cv2.putText(
+                frame,
+                f"Error: {error}",
+                (padding, y_offset),
+                font,
+                0.5,
+                (0, 0, 255),  # Red for errors
+                1
+            )
+
+        return frame
+
     def draw_info_overlay(
         self,
         frame: np.ndarray,
@@ -249,6 +360,7 @@ class Visualizer:
             "P: Toggle profiling",
             "F: Toggle faces",
             "O: Toggle objects",
+            "C: Toggle caption",
         ]
 
         x_start = w - 200

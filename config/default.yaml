@@ -9,13 +9,13 @@ camera:
 
 object_detector:
   enabled: true
-  model: "yolox_nano"
-  input_size: 416
-  confidence_threshold: 0.30
+  model: "yolox_tiny"
+  input_size: 640
+  confidence_threshold: 0.40  # Balanced threshold for YOLOX-Tiny
   nms_threshold: 0.45
   max_detections: 50
   device: "mps"  # mps, cuda, or cpu
-  model_path: "data/models/yolox_nano.pth"
+  model_path: "data/models/yolox_tiny.pth"
 
 face_detector:
   enabled: true
@@ -70,3 +70,22 @@ logging:
   level: "INFO"  # DEBUG, INFO, WARNING, ERROR
   log_file: "logs/app.log"
   rotation: "10 MB"
+
+captioning:
+  enabled: false
+  server_url: "http://localhost:8080"
+  prompt: "Describe what you see in one sentence."
+  interval_seconds: 0.5
+  jpeg_quality: 80
+  max_tokens: 100
+  timeout_seconds: 8.0
+
+web_ui:
+  enabled: false  # Set true for browser UI, false for OpenCV window
+  host: "127.0.0.1"
+  port: 8000
+  frame_quality: 80  # JPEG quality for browser streaming (1-100)
+  stream_fps: 15
+  send_overlays: true  # Show detection boxes in browser
+  # NOTE: When web_ui is enabled, keyboard shortcuts (F/O/C/I/P/S/R) are disabled.
+  # Use browser UI controls instead. OpenCV window is hidden in web mode.

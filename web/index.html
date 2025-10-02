@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Detection & Captioning</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* Left: Video + Caption */
+        .video-section {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        #canvas {
+            width: 100%;
+            border-radius: 4px;
+            background: #000;
+            display: block;
+        }
+
+        .caption-box {
+            margin-top: 15px;
+            padding: 15px;
+            background: #3a3a3a;
+            border-radius: 4px;
+            min-height: 80px;
+        }
+
+        .caption-text {
+            font-size: 16px;
+            line-height: 1.5;
+            color: #ffeb3b;
+            margin-bottom: 10px;
+        }
+
+        /* Right: Controls + Lists */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #4caf50;
+            border-bottom: 2px solid #4caf50;
+            padding-bottom: 8px;
+        }
+
+        /* Toggle Buttons */
+        .toggle-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .toggle-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .toggle-btn.active {
+            background: #4caf50;
+            color: white;
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.4);
+        }
+
+        .toggle-btn.inactive {
+            background: #555;
+            color: #aaa;
+        }
+
+        .toggle-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        /* Config Controls */
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        #promptInput {
+            width: 100%;
+            padding: 10px;
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        #promptInput:focus {
+            outline: none;
+            border-color: #4caf50;
+        }
+
+        #intervalSelect {
+            width: 100%;
+            padding: 10px;
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        /* Detection Lists */
+        .detection-list {
+            list-style: none;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .detection-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .detection-list::-webkit-scrollbar-track {
+            background: #2a2a2a;
+        }
+
+        .detection-list::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 3px;
+        }
+
+        .detection-list li {
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            background: #3a3a3a;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .detection-list li:hover {
+            background: #444;
+        }
+
+        .object-item {
+            border-left: 3px solid #4caf50;
+        }
+
+        .face-item {
+            border-left: 3px solid #ff9800;
+        }
+
+        .known-face {
+            border-left: 3px solid #00bcd4;
+        }
+
+        /* Stats */
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #aaa;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            opacity: 0.7;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #4caf50;
+        }
+
+        .error {
+            color: #f44336;
+            font-size: 14px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left Column: Video + Caption -->
+        <div class="video-section">
+            <canvas id="canvas"></canvas>
+
+            <div class="caption-box">
+                <div class="caption-text" id="captionText">Initializing...</div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-label">FPS</span>
+                        <span class="stat-value" id="fps">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Latency</span>
+                        <span class="stat-value" id="latency">0</span>ms
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Age</span>
+                        <span class="stat-value" id="age">0</span>ms
+                    </div>
+                    <span class="error" id="error"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Controls + Lists -->
+        <div class="sidebar">
+            <!-- Detection Toggles -->
+            <div class="card">
+                <h2>Detection Controls</h2>
+                <div class="toggle-buttons">
+                    <button id="toggleObjects" class="toggle-btn active" onclick="toggleFeature('objects')">
+                        Objects
+                    </button>
+                    <button id="toggleFaces" class="toggle-btn active" onclick="toggleFeature('faces')">
+                        Faces
+                    </button>
+                    <button id="toggleCaption" class="toggle-btn active" onclick="toggleFeature('caption')">
+                        Caption
+                    </button>
+                </div>
+            </div>
+
+            <!-- Caption Configuration -->
+            <div class="card">
+                <h2>Caption Config</h2>
+                <div class="control-group">
+                    <label for="promptInput">Instruction:</label>
+                    <input type="text" id="promptInput" value="Describe what you see in one sentence.">
+                </div>
+                <div class="control-group">
+                    <label for="intervalSelect">Update Interval:</label>
+                    <select id="intervalSelect">
+                        <option value="0.3">300ms (Fast)</option>
+                        <option value="0.5" selected>500ms (Balanced)</option>
+                        <option value="1.0">1000ms (Slow)</option>
+                        <option value="2.0">2000ms (Very Slow)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Detected Objects -->
+            <div class="card">
+                <h2>Detected Objects</h2>
+                <ul class="detection-list" id="objectsList">
+                    <li style="color:#666;">No objects detected</li>
+                </ul>
+            </div>
+
+            <!-- Detected Faces -->
+            <div class="card">
+                <h2>Detected Faces</h2>
+                <ul class="detection-list" id="facesList">
+                    <li style="color:#666;">No faces detected</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dynamic WebSocket URL (works with any host/port)
+        const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+        const wsUrl = wsProtocol + location.host + '/ws';
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // WebSocket reconnection state
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectDelay = 30000;  // 30 seconds max
+        let reconnectTimeout = null;
+
+        // Feature toggle states
+        const featureStates = {
+            objects: true,
+            faces: true,
+            caption: true
+        };
+
+        // Connect to WebSocket with reconnection logic
+        function connectWebSocket() {
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                reconnectAttempts = 0;
+                document.getElementById('error').textContent = '';
+            };
+
+            ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            // Draw video frame
+            if (data.frame) {
+                const img = new Image();
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = 'data:image/jpeg;base64,' + data.frame;
+            }
+
+            // Update caption
+            const caption = data.caption || {};
+            document.getElementById('captionText').textContent = caption.text || "Waiting for caption...";
+            document.getElementById('latency').textContent = (caption.latency_ms || 0).toFixed(0);
+            document.getElementById('age').textContent = (caption.age_ms || 0).toFixed(0);
+            document.getElementById('error').textContent = caption.error || "";
+
+            // Update FPS
+            document.getElementById('fps').textContent = (data.fps || 0).toFixed(1);
+
+            // Update objects list
+            const objectsList = document.getElementById('objectsList');
+            if (data.objects && data.objects.length > 0) {
+                objectsList.innerHTML = data.objects
+                    .map(obj => `<li class="object-item">${obj.label} (${(obj.conf * 100).toFixed(0)}%)</li>`)
+                    .join('');
+            } else {
+                objectsList.innerHTML = '<li style="color:#666;">No objects detected</li>';
+            }
+
+            // Update faces list
+            const facesList = document.getElementById('facesList');
+            if (data.faces && data.faces.length > 0) {
+                facesList.innerHTML = data.faces
+                    .map(face => {
+                        const cls = face.name !== "Unknown" ? "known-face" : "face-item";
+                        return `<li class="${cls}">ID ${face.track_id}: ${face.name}</li>`;
+                    })
+                    .join('');
+            } else {
+                facesList.innerHTML = '<li style="color:#666;">No faces detected</li>';
+            }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket connection closed');
+
+                // Clear any pending reconnect
+                if (reconnectTimeout) {
+                    clearTimeout(reconnectTimeout);
+                }
+
+                // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
+                reconnectAttempts++;
+
+                document.getElementById('error').textContent = `Disconnected. Reconnecting in ${(delay/1000).toFixed(0)}s...`;
+
+                reconnectTimeout = setTimeout(() => {
+                    console.log(`Reconnecting (attempt ${reconnectAttempts})...`);
+                    connectWebSocket();
+                }, delay);
+            };
+        }
+
+        // Initial connection
+        connectWebSocket();
+
+        // Config change handlers (debounced to avoid spam)
+        let configTimeout;
+
+        document.getElementById('promptInput').addEventListener('input', (e) => {
+            clearTimeout(configTimeout);
+            configTimeout = setTimeout(() => {
+                fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({prompt: e.target.value})
+                });
+            }, 500);  // Wait 500ms after user stops typing
+        });
+
+        document.getElementById('intervalSelect').addEventListener('change', (e) => {
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({interval: parseFloat(e.target.value)})
+            });
+        });
+
+        // Toggle feature handler
+        function toggleFeature(feature) {
+            featureStates[feature] = !featureStates[feature];
+            const btn = document.getElementById('toggle' + feature.charAt(0).toUpperCase() + feature.slice(1));
+            btn.className = 'toggle-btn ' + (featureStates[feature] ? 'active' : 'inactive');
+
+            fetch('/api/toggle', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({feature: feature, enabled: featureStates[feature]})
+            });
+        }
+    </script>
+</body>
+</html>

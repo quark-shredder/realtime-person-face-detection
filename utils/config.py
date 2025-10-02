@@ -18,13 +18,13 @@ class CameraConfig:
 @dataclass
 class ObjectDetectorConfig:
     enabled: bool = True
-    model: str = "yolox_nano"
-    input_size: int = 416
-    confidence_threshold: float = 0.30
+    model: str = "yolox_tiny"
+    input_size: int = 640
+    confidence_threshold: float = 0.50
     nms_threshold: float = 0.45
     max_detections: int = 50
     device: str = "mps"
-    model_path: str = "data/models/yolox_nano.pth"
+    model_path: str = "data/models/yolox_tiny.pth"
 
 
 @dataclass
@@ -97,6 +97,27 @@ class LoggingConfig:
 
 
 @dataclass
+class CaptioningConfig:
+    enabled: bool = False
+    server_url: str = "http://localhost:8080"
+    prompt: str = "Describe what you see in one sentence."
+    interval_seconds: float = 0.5
+    jpeg_quality: int = 80
+    max_tokens: int = 100
+    timeout_seconds: float = 8.0
+
+
+@dataclass
+class WebUIConfig:
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8000
+    frame_quality: int = 70
+    stream_fps: int = 15
+    send_overlays: bool = True
+
+
+@dataclass
 class Config:
     """Main configuration class."""
     camera: CameraConfig = field(default_factory=CameraConfig)
@@ -108,6 +129,8 @@ class Config:
     visualization: VisualizationConfig = field(default_factory=VisualizationConfig)
     recording: RecordingConfig = field(default_factory=RecordingConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    captioning: CaptioningConfig = field(default_factory=CaptioningConfig)
+    web_ui: WebUIConfig = field(default_factory=WebUIConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "Config":
@@ -129,6 +152,8 @@ class Config:
             visualization=VisualizationConfig(**data.get('visualization', {})),
             recording=RecordingConfig(**data.get('recording', {})),
             logging=LoggingConfig(**data.get('logging', {})),
+            captioning=CaptioningConfig(**data.get('captioning', {})),
+            web_ui=WebUIConfig(**data.get('web_ui', {})),
         )
 
     def to_yaml(self, path: str | Path) -> None:
