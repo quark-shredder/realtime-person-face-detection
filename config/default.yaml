@@ -1,0 +1,70 @@
+# Real-time Object Detection Configuration
+
+camera:
+  device_id: 0
+  width: 640
+  height: 480
+  fps: 30
+  buffer_size: 2
+
+object_detector:
+  enabled: true
+  model: "yolox_nano"
+  input_size: 416
+  confidence_threshold: 0.30
+  nms_threshold: 0.45
+  max_detections: 50
+  device: "mps"  # mps, cuda, or cpu
+  model_path: "data/models/yolox_nano.pth"
+
+face_detector:
+  enabled: true
+  model: "mediapipe"
+  min_detection_confidence: 0.5
+  model_selection: 0  # 0=short range (2m), 1=full range (5m)
+
+face_recognition:
+  enabled: true
+  model_pack: "buffalo_l"  # buffalo_l, buffalo_s
+  embedding_model: "mobilefacenet"  # mobilefacenet, arcface_r50
+  similarity_threshold: 0.50
+  enrollment_samples: 15
+  recognition_interval: 30  # frames between re-recognition per track
+  enrolled_faces_path: "data/enrolled"
+
+tracking:
+  enabled: true
+  tracker_type: "bytetrack"  # bytetrack, sort, centroid
+  track_thresh: 0.5
+  track_buffer: 30
+  match_thresh: 0.8
+  min_box_area: 100
+
+performance:
+  target_fps: 30
+  num_threads: 3  # capture, inference, recognition
+  enable_profiling: false
+  adaptive_quality: true  # drop features if CPU overloaded
+
+visualization:
+  show_fps: true
+  show_latency: true
+  show_track_ids: true
+  show_confidence: true
+  box_thickness: 2
+  font_scale: 0.6
+  colors:
+    object: [0, 255, 0]      # green
+    face: [255, 165, 0]      # orange
+    recognized: [0, 255, 255] # yellow
+    unknown: [128, 128, 128] # gray
+
+recording:
+  save_path: "logs/recordings"
+  video_codec: "mp4v"
+  image_format: "jpg"
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "logs/app.log"
+  rotation: "10 MB"

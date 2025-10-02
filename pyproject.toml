@@ -1,0 +1,44 @@
+[project]
+name = "realtime-object-detection"
+version = "0.1.0"
+description = "Real-time object detection and face recognition with YOLOX and InsightFace"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.5.0",
+    "torchvision>=0.20.0",
+    "opencv-python>=4.10.0",
+    "numpy>=1.26.0,<2.0.0",
+    "scipy>=1.13.0",
+    "pyyaml>=6.0.1",
+    "mediapipe>=0.10.14",
+    "insightface>=0.7.3",
+    "onnxruntime>=1.18.0",
+    "scikit-learn>=1.5.0",
+    "loguru>=0.7.2",
+    "tqdm>=4.66.0",
+    "Pillow>=10.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "black>=24.0.0",
+    "ruff>=0.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[project.scripts]
+realtime-detect = "main:main"
+enroll-face = "scripts.enroll:main"
+download-models = "scripts.download_models:main"
