@@ -23,6 +23,7 @@ class MediaPipeFaceDetector:
         """
         self.min_confidence = min_detection_confidence
         self.model_selection = model_selection
+        self._closed = False
 
         # Initialize MediaPipe Face Detection
         self.mp_face_detection = mp.solutions.face_detection
@@ -80,9 +81,17 @@ class MediaPipeFaceDetector:
 
     def close(self):
         """Release resources."""
-        if hasattr(self, 'detector'):
-            self.detector.close()
+        if not self._closed and hasattr(self, 'detector') and self.detector is not None:
+            try:
+                self.detector.close()
+            except (ValueError, Exception):
+                pass  # Already closed or error during cleanup
+            finally:
+                self._closed = True
 
     def __del__(self):
         """Cleanup on deletion."""
-        self.close()
+        try:
+            self.close()
+        except:
+            pass  # Suppress errors during interpreter shutdown

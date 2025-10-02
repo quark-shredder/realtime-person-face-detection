@@ -3,8 +3,12 @@
 import cv2
 import time
 import argparse
+import warnings
 from pathlib import Path
 from datetime import datetime
+
+# Suppress warnings from dependencies
+warnings.filterwarnings('ignore', category=FutureWarning, module='insightface')
 
 from utils.config import Config
 from utils.camera import CameraManager, CameraPermissionError, CameraNotFoundError
