@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 
 from utils.config import Config
-from utils.camera import CameraManager
+from utils.camera import CameraManager, CameraPermissionError, CameraNotFoundError
 from utils.visualization import Visualizer
 from detectors.yolox_detector import YOLOXDetector
 from detectors.face_detector import MediaPipeFaceDetector
@@ -113,13 +113,37 @@ class RealtimeDetectionApp:
         """Main application loop."""
         self.running = True
 
-        # Start camera
-        self.camera.start()
+        # Start camera with error handling
+        try:
+            print("\nStarting camera...")
+            self.camera.start()
+            print("✓ Camera ready")
+        except CameraPermissionError as e:
+            print("\n" + "=" * 60)
+            print("❌ CAMERA PERMISSION DENIED")
+            print("=" * 60)
+            print(f"\n{e}\n")
+            print("=" * 60)
+            return
+        except CameraNotFoundError as e:
+            print("\n" + "=" * 60)
+            print("❌ CAMERA NOT FOUND")
+            print("=" * 60)
+            print(f"\n{e}\n")
+            print("Available troubleshooting:")
+            print("  • Check if camera is connected")
+            print("  • Try a different camera device ID: python main.py --camera 1")
+            print("  • Close other apps using the camera (Zoom, Skype, etc.)")
+            print("=" * 60)
+            return
+        except Exception as e:
+            print(f"\n❌ Unexpected error starting camera: {e}")
+            return
 
         # Wait for camera to warm up
         time.sleep(0.5)
 
-        print("Starting detection...")
+        print("\nStarting detection...")
         print("Press 'Q' to quit\n")
 
         try:

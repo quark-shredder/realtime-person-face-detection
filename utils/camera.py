@@ -4,8 +4,19 @@ import cv2
 import threading
 import queue
 import time
+import platform
 from typing import Optional, Tuple
 import numpy as np
+
+
+class CameraPermissionError(Exception):
+    """Raised when camera permission is denied."""
+    pass
+
+
+class CameraNotFoundError(Exception):
+    """Raised when camera device is not found."""
+    pass
 
 
 class CameraManager:
@@ -42,37 +53,101 @@ class CameraManager:
         self.frame_count = 0
         self.start_time = time.time()
 
-    def start(self) -> bool:
-        """Start camera capture thread."""
+    def start(self, retry_count: int = 3, retry_delay: float = 1.0) -> bool:
+        """
+        Start camera capture thread.
+
+        Args:
+            retry_count: Number of retry attempts
+            retry_delay: Delay between retries in seconds
+
+        Returns:
+            True if successful
+
+        Raises:
+            CameraPermissionError: If camera access is denied
+            CameraNotFoundError: If camera device not found
+        """
         if self.running:
             return True
 
-        # Initialize camera
-        self.cap = cv2.VideoCapture(self.device_id)
-        if not self.cap.isOpened():
-            raise RuntimeError(f"Failed to open camera {self.device_id}")
+        last_error = None
 
-        # Set camera properties
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+        for attempt in range(retry_count):
+            try:
+                # Initialize camera
+                self.cap = cv2.VideoCapture(self.device_id)
 
-        # Disable auto-focus for stability (if supported)
-        self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+                if not self.cap.isOpened():
+                    if attempt < retry_count - 1:
+                        print(f"Camera not available, retrying in {retry_delay}s... ({attempt + 1}/{retry_count})")
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        # Determine error type
+                        if platform.system() == 'Darwin':  # macOS
+                            raise CameraPermissionError(
+                                f"Camera access denied. Please grant camera permission:\n"
+                                f"  1. Open System Settings → Privacy & Security → Camera\n"
+                                f"  2. Enable permission for Terminal (or your Python IDE)\n"
+                                f"  3. Run this program again\n\n"
+                                f"Quick fix: Run 'sudo killall VDCAssistant' and try again"
+                            )
+                        else:
+                            raise CameraNotFoundError(
+                                f"Camera {self.device_id} not found. "
+                                f"Please check your camera connection or try a different device ID"
+                            )
 
-        # Get actual properties
-        actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+                # Test if we can actually read from camera
+                ret, test_frame = self.cap.read()
+                if not ret or test_frame is None:
+                    self.cap.release()
+                    if attempt < retry_count - 1:
+                        print(f"Camera test failed, retrying... ({attempt + 1}/{retry_count})")
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        raise CameraPermissionError(
+                            "Camera opened but cannot read frames. Permission may be denied."
+                        )
 
-        print(f"Camera initialized: {actual_width}x{actual_height} @ {actual_fps} FPS")
+                # Set camera properties
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+                self.cap.set(cv2.CAP_PROP_FPS, self.fps)
 
-        # Start capture thread
-        self.running = True
-        self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
-        self.capture_thread.start()
+                # Disable auto-focus for stability (if supported)
+                self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
 
-        return True
+                # Get actual properties
+                actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+
+                print(f"✓ Camera initialized: {actual_width}x{actual_height} @ {actual_fps} FPS")
+
+                # Start capture thread
+                self.running = True
+                self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+                self.capture_thread.start()
+
+                return True
+
+            except (CameraPermissionError, CameraNotFoundError):
+                raise
+            except Exception as e:
+                last_error = e
+                if attempt < retry_count - 1:
+                    print(f"Error starting camera: {e}, retrying... ({attempt + 1}/{retry_count})")
+                    time.sleep(retry_delay)
+                    continue
+
+        # All retries failed
+        if last_error:
+            raise CameraNotFoundError(f"Failed to start camera after {retry_count} attempts: {last_error}")
+
+        return False
 
     def _capture_loop(self):
         """Background thread for continuous frame capture."""

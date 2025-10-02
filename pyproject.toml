@@ -30,6 +30,12 @@ dev = [
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["detectors", "recognition", "tracking", "utils", "scripts"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml"]
+
 [tool.black]
 line-length = 100
 target-version = ['py310']
