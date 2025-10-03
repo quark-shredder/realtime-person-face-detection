@@ -268,11 +268,8 @@ class RealtimeDetectionApp:
                         # No faces - skip tracking
                         stage_timings['tracking'] = 0.0
 
-                # Caption worker update (only when enabled)
+                # Initialize caption (updated later after visualization)
                 caption = {"text": "", "error": None, "latency_ms": 0, "age_ms": 0}
-                if self.caption_worker and self.config.captioning.enabled:
-                    self.caption_worker.update_frame(frame)
-                    caption = self.caption_worker.get_latest_caption()
 
                 # Handle browser config updates (if web UI enabled)
                 if self.web_server:
@@ -286,6 +283,10 @@ class RealtimeDetectionApp:
                             self.config.captioning.interval_seconds = config_update["interval"]
                             if self.caption_worker:
                                 self.caption_worker.set_interval(config_update["interval"])
+                        if "feed_mode" in config_update:
+                            # Validate feed_mode (prevent invalid values)
+                            if config_update["feed_mode"] in {"raw", "processed"}:
+                                self.config.captioning.feed_mode = config_update["feed_mode"]
 
                     toggle = server.pop_toggle()
                     if toggle:
@@ -311,6 +312,19 @@ class RealtimeDetectionApp:
                     display_frame = self.visualizer.draw_face_tracks(
                         display_frame, tracks
                     )
+
+                # Caption worker update (after visualization, so display_frame has face boxes)
+                if self.caption_worker and self.config.captioning.enabled:
+                    # Choose frame based on feed mode
+                    if self.config.captioning.feed_mode == "processed":
+                        # Send frame with face boxes (copy to avoid tearing)
+                        caption_frame = display_frame.copy()
+                    else:
+                        # Send raw camera feed
+                        caption_frame = frame
+
+                    self.caption_worker.update_frame(caption_frame)
+                    caption = self.caption_worker.get_latest_caption()
 
                 # Caption overlay (OpenCV mode only)
                 if (caption.get("text") or caption.get("error")) and not self.web_server:

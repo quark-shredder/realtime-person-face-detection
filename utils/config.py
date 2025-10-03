@@ -105,6 +105,7 @@ class CaptioningConfig:
     jpeg_quality: int = 80
     max_tokens: int = 100
     timeout_seconds: float = 8.0
+    feed_mode: str = "processed"  # "raw" or "processed" (with face boxes)
 
 
 @dataclass
